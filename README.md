@@ -1,12 +1,12 @@
 # XiaoAi Volume Sync
 
-> 让 HyperOS 小爱同学的播报音量、媒体音量和音量键行为保持一致。
+> 让 HyperOS 小爱同学使用媒体音量。
 
 [![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com/about/versions/12)
 [![LSPosed](https://img.shields.io/badge/Framework-LSPosed-5C6BC0)](https://github.com/LSPosed/LSPosed)
 [![Version](https://img.shields.io/badge/version-1.4.0-0969DA)](https://github.com/Rin010/xiaoai-volume-sync)
 
-XiaoAi Volume Sync 是一个面向 HyperOS 的 LSPosed 模块，用于控制小爱同学独立音量流的行为。它可以让小爱音量跟随媒体音量，也可以让小爱的播报直接使用媒体音量，并解决小爱前台音量键和语音识别期间媒体静音带来的干扰。
+XiaoAi Volume Sync 是一个适用 HyperOS 的 LSPosed 模块，用于控制小爱同学独立音量流的行为。它可以让小爱音量跟随媒体音量，也可以让小爱的播报直接使用媒体音量。
 
 模块仅作用于小爱同学（`com.miui.voiceassist`）和 Android 系统框架，不需要网络权限。
 
@@ -19,7 +19,7 @@ XiaoAi Volume Sync 是一个面向 HyperOS 的 LSPosed 模块，用于控制小�
 | 小爱同学前台按键修改媒体音量 | 小爱界面或浮窗位于前台时，让音量键调节媒体音量 | 开 |
 | 禁用小爱同学静音媒体音量 | 阻止小爱在语音识别期间临时静音媒体及随后恢复静音状态 | 开 |
 
-四个开关彼此独立，可在模块设置页随时修改。除了“使用媒体音量”需要重启小爱进程以重建播放器外，其余开关会立即应用。
+可在模块设置页随时修改。“使用媒体音量”需要重启小爱进程以重建播放器，其余开关会立即应用。
 
 ## 环境要求
 
@@ -215,19 +215,6 @@ adb logcat -s XiaoAiVolumeSync
 - 运行日志不包含语音内容。
 - 状态 Provider 和进程间广播会校验签名、UID 或进程身份。
 - 正式版不注册诊断广播。
-
-## 参与贡献
-
-欢迎通过 [Issues](https://github.com/Rin010/xiaoai-volume-sync/issues) 提交兼容性报告和问题，也欢迎提交 Bug 修复与新设备验证结果。报告问题时请包含：
-
-- 设备型号与代号
-- Android 和 HyperOS 版本
-- 小爱同学版本
-- LSPosed 版本
-- 四个功能开关的状态
-- 可稳定复现问题的步骤和相关日志
-
-提交代码前请运行 [`build.ps1`](build.ps1)。构建脚本会自动执行当前测试并检查 APK 签名与对齐状态。
 
 ## 相关项目与资料
 
