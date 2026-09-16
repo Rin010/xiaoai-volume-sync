@@ -89,8 +89,6 @@ flowchart LR
 - 将小爱创建的 `AudioTrack` 和 `MediaPlayer` 从 `USAGE_ASSISTANT` 改为 `USAGE_MEDIA`。
 - 保留小爱的音频焦点请求，不改变其他应用的音频行为。
 
-这项功能不会修改 Android 全局音量组，因此系统界面仍可能显示独立的小爱音量滑块。
-
 ### 前台音量键
 
 系统进程中的按键路由仅在小爱 Activity 或 `voice_assist_root` 浮窗处于前台时启用。前台状态会校验上报进程的 PID 和 UID，避免小爱被强制停止后残留错误状态。
