@@ -6,7 +6,9 @@
 [![LSPosed](https://img.shields.io/badge/Framework-LSPosed-5C6BC0)](https://github.com/LSPosed/LSPosed)
 [![Version](https://img.shields.io/badge/version-1.4.0-0969DA)](https://github.com/Rin010/xiaoai-volume-sync)
 
-XiaoAi Volume Sync 是一个适用 HyperOS 的 LSPosed 模块，用于控制小爱同学独立音量流的行为。它可以让小爱音量跟随媒体音量，也可以让小爱的播报直接使用媒体音量。
+在无数次骑车需要单独调小爱音量，又无数次晚上让关灯被最大音量背刺后搞了这玩意。此项目除了这段话都是AI搞的，有问题找AI。
+
+XiaoAi Volume Sync 是一个适用 HyperOS 的 LSPosed 模块，用于控制小爱同学独立音量流的行为。它可以让小爱音量跟随媒体音量，或让小爱的播报直接使用媒体音量。
 
 模块仅作用于小爱同学（`com.miui.voiceassist`）和 Android 系统框架，不需要网络权限。
 
@@ -54,8 +56,8 @@ XiaoAi Volume Sync 是一个适用 HyperOS 的 LSPosed 模块，用于控制小�
 
 | 使用方式 | 同步 | 使用媒体音量 | 前台按键 | 禁止媒体静音 |
 | --- | :---: | :---: | :---: | :---: |
-| 仅让两个音量保持接近 | 开 | 关 | 开 | 开 |
-| 完全使用媒体音量 | 关 | 开 | 开 | 开 |
+| 仅让两个音量保持接近 | 开 | 关 | 开 | 关 |
+| 完全使用媒体音量 | 关 | 开 | 关(此时调整音量自动为媒体音量) | 关 |
 | 保留独立小爱音量 | 关 | 关 | 关 | 按需 |
 
 “同步”和“使用媒体音量”可以同时开启。此时小爱的实际播报使用媒体音量，独立小爱滑块仍会跟随媒体音量。
