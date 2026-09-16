@@ -29,9 +29,23 @@ public final class HookEntry implements IXposedHookLoadPackage {
             @Override protected void afterHookedMethod(MethodHookParam p) {
                 if (controller != null) return;
                 try {
-                    SyncController ready = new SyncController((Context) p.args[0], pkg.processName);
+                    RuntimeOptions switches = new RuntimeOptions((Context) p.args[0]);
+                    SyncController ready = new SyncController((Context) p.args[0], pkg.processName, switches);
                     controller = ready;
+                    if (XiaoAiCompat.supportsDirectMedia(ready.targetVersionCode())) {
+                        try { new DirectMediaHooks(switches).install(pkg.classLoader,
+                            XiaoAiCompat.streamSelector(ready.targetVersionCode())); }
+                        catch (Throwable e) { switches.directAvailable = false; error("direct-media-hooks", e); }
+                    } else if (switches.directMedia) {
+                        switches.directAvailable = false;
+                        error("direct-media-version", new IllegalStateException("Uninspected XiaoAi version"));
+                    }
                     ready.start(Contract.TARGET.equals(pkg.processName));
+                    if (Contract.TARGET.equals(pkg.processName)) {
+                        ready.trackForeground((Application) p.thisObject);
+                        try { new OverlayFrontTracker(ready).install(pkg.classLoader); }
+                        catch (Throwable e) { error("overlay-front", e); }
+                    }
                     hookKnownVolumeFloor(pkg, ready);
                 } catch (Throwable e) { error("initialize", e); }
             }
@@ -40,7 +54,7 @@ public final class HookEntry implements IXposedHookLoadPackage {
             new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     SyncController c = controller;
-                    if (c == null || c.isInternalWrite() || (int) p.args[0] != 11) return;
+                    if (c == null || !c.options.sync || c.isInternalWrite() || (int) p.args[0] != 11) return;
                     try {
                         int requested = (int) p.args[1];
                         int target = c.readTarget();
@@ -50,7 +64,7 @@ public final class HookEntry implements IXposedHookLoadPackage {
                 }
                 @Override protected void afterHookedMethod(MethodHookParam p) {
                     SyncController c = controller;
-                    if (c != null && !c.isInternalWrite() && (int) p.args[0] == 11) c.requestSync("assistant-write");
+                    if (c != null && c.options.sync && !c.isInternalWrite() && (int) p.args[0] == 11) c.requestSync("assistant-write");
                 }
             });
         XposedHelpers.findAndHookMethod(AudioManager.class, "adjustStreamVolume", int.class, int.class, int.class,
@@ -59,7 +73,7 @@ public final class HookEntry implements IXposedHookLoadPackage {
                     SyncController c = controller;
                     int stream = (int) p.args[0], direction = (int) p.args[1];
                     // Preserve mute/unmute and all media operations, including XiaoAi's focus logic.
-                    if (c == null || c.isInternalWrite() || stream != 11 || direction < -1 || direction > 1) return;
+                    if (c == null || !c.options.sync || c.isInternalWrite() || stream != 11 || direction < -1 || direction > 1) return;
                     if (c.syncNow("assistant-adjust")) p.setResult(null);
                 }
             });
@@ -70,6 +84,14 @@ public final class HookEntry implements IXposedHookLoadPackage {
                 try {
                     if (((AudioTrack) p.thisObject).getAudioAttributes().getUsage() == 16) c.syncNow("before-play");
                 } catch (Throwable e) { c.failure("before-play", e); }
+            }
+            @Override protected void afterHookedMethod(MethodHookParam p) {
+                SyncController c = controller;
+                if (c == null || p.hasThrowable()) return;
+                try {
+                    AudioTrack track = (AudioTrack) p.thisObject;
+                    c.played(track.getStreamType(), track.getAudioAttributes().getUsage());
+                } catch (Throwable e) { c.failure("playback-report", e); }
             }
         });
         XposedBridge.hookAllConstructors(AudioTrack.class, new XC_MethodHook() {
@@ -84,16 +106,16 @@ public final class HookEntry implements IXposedHookLoadPackage {
     }
 
     private void hookKnownVolumeFloor(XC_LoadPackage.LoadPackageParam pkg, SyncController c) {
-        // Optional optimization only for the APK examined on the connected tablet.
+        // Optional optimization only for explicitly inspected XiaoAi versions.
         // Standard AudioManager hooks above remain the primary protection on all versions.
-        if (c.targetVersionCode() != 507013033L) return;
+        if (!XiaoAiCompat.supportsKnownVolumeFloor(c.targetVersionCode())) return;
         try {
             XposedHelpers.findAndHookMethod("com.xiaomi.voiceassistant.l", pkg.classLoader, "ensureXiaoaiVolume", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     if (c.syncNow("volume-floor")) p.setResult(null);
                 }
             });
-            Log.i(Contract.TAG, "Installed known XiaoAi 7.13.33.0017 volume-floor hook");
+            Log.i(Contract.TAG, "Installed verified XiaoAi volume-floor hook for " + c.targetVersionCode());
         } catch (Throwable e) { error("optional-volume-floor", e); }
     }
     private static void error(String stage, Throwable e) {

@@ -7,22 +7,41 @@ import android.database.Cursor;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Bundle;
+import android.content.Intent;
 
 /** The UI trusts reports only from the actual target UID, never a supplied package name. */
 public final class StatusProvider extends ContentProvider {
     @Override public boolean onCreate() { return true; }
     @Override public Bundle call(String method, String arg, Bundle extras) {
         int caller = Binder.getCallingUid();
-        if ("routeStatus".equals(method) && caller == android.os.Process.SYSTEM_UID && extras != null) {
-            getContext().getSharedPreferences(Contract.PREFS, 0).edit()
-                .putString("routeVersion", extras.getString("version", ""))
-                .putLong("routeUpdated", System.currentTimeMillis()).apply();
-            return Bundle.EMPTY;
-        }
         String[] packages = getContext().getPackageManager().getPackagesForUid(caller);
         boolean target = false;
         if (packages != null) for (String name : packages) {
             if (Contract.TARGET.equals(name)) target = true;
+        }
+        if ("getOptions".equals(method) && (target || caller == android.os.Process.SYSTEM_UID)) {
+            SharedPreferences p = getContext().getSharedPreferences(Contract.PREFS, 0);
+            Bundle out = new Bundle();
+            out.putBoolean(Contract.SYNC_KEY, p.getBoolean(Contract.SYNC_KEY, true));
+            out.putBoolean(Contract.DIRECT_KEY, p.getBoolean(Contract.DIRECT_KEY, false));
+            out.putBoolean(Contract.KEYS_KEY, p.getBoolean(Contract.KEYS_KEY, true));
+            return out;
+        }
+        if ("frontState".equals(method) && target && extras != null) {
+            boolean front = extras.getBoolean("front", false);
+            getContext().sendBroadcast(new Intent(Contract.FRONT_ACTION).setPackage("android")
+                .putExtra("front", front)
+                .putExtra("pid", extras.getInt("pid", -1))
+                .putExtra("uid", caller));
+            return Bundle.EMPTY;
+        }
+        if ("routeStatus".equals(method) && caller == android.os.Process.SYSTEM_UID && extras != null) {
+            getContext().getSharedPreferences(Contract.PREFS, 0).edit()
+                .putString("routeVersion", extras.getString("version", ""))
+                .putBoolean("routeEnabled", extras.getBoolean("enabled", false))
+                .putBoolean("xiaoaiFront", extras.getBoolean("front", false))
+                .putLong("routeUpdated", System.currentTimeMillis()).apply();
+            return Bundle.EMPTY;
         }
         if (!target || !"report".equals(method) || extras == null) {
             throw new SecurityException("Only XiaoAi may report hook state");
@@ -35,6 +54,12 @@ public final class StatusProvider extends ContentProvider {
         for (String key : new String[]{"media", "mediaMax", "assistant", "assistantMax", "target", "pid"}) {
             out.putInt(key, extras.getInt(key, -1));
         }
+        out.putInt("selectedStream", extras.getInt("selectedStream", -1));
+        out.putInt("playbackStream", extras.getInt("playbackStream", -1));
+        out.putInt("playbackUsage", extras.getInt("playbackUsage", -1));
+        out.putLong("playbackAt", extras.getLong("playbackAt", 0));
+        out.putBoolean("syncEnabled", extras.getBoolean("syncEnabled", false));
+        out.putBoolean("directMediaEnabled", extras.getBoolean("directMediaEnabled", false));
         out.putLong("updated", System.currentTimeMillis());
         out.putBoolean("temporaryMediaMute", extras.getBoolean("temporaryMediaMute"));
         out.apply();

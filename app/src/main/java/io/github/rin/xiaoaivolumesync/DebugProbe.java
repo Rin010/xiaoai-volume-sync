@@ -34,7 +34,7 @@ final class DebugProbe extends BroadcastReceiver {
             sync.syncNow("probe-media-muted");
             result.put("temporaryMutePreservesTarget", sync.savedIndex(11) == expected);
             result.put("mediaIndexUnchanged", sync.savedIndex(3) == mediaBefore);
-            if (sync.targetVersionCode() == 507013033L) {
+            if (XiaoAiCompat.supportsKnownVolumeFloor(sync.targetVersionCode())) {
                 Class<?> managerClass = Class.forName("com.xiaomi.voiceassistant.l", false, context.getClassLoader());
                 Object manager = managerClass.getDeclaredMethod("getInstance").invoke(null);
                 managerClass.getDeclaredMethod("ensureXiaoaiVolume").invoke(manager);

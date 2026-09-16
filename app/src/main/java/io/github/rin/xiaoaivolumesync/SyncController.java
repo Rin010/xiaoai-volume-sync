@@ -1,5 +1,7 @@
 package io.github.rin.xiaoaivolumesync;
 
+import android.app.Activity;
+import android.app.Application;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -26,6 +28,7 @@ final class SyncController {
     private final Context context;
     private final String processName;
     private final AudioManager audio;
+    final RuntimeOptions options;
     private final Method lastAudible;
     private final Method minimumIndex;
     private final Handler worker;
@@ -37,12 +40,17 @@ final class SyncController {
     private long lastRewriteAt;
     private long versionCode;
     private String versionName = "unknown";
+    private volatile int playbackStream = -1, playbackUsage = -1;
+    private volatile long playbackAt;
+    private volatile boolean activityFront, overlayFront;
+    private boolean lastReportedFront;
     private boolean supported;
     private final Runnable reconcile = () -> syncNow(pendingReason);
 
-    SyncController(Context context, String processName) throws Exception {
+    SyncController(Context context, String processName, RuntimeOptions options) throws Exception {
         this.context = context;
         this.processName = processName;
+        this.options = options;
         audio = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         lastAudible = AudioManager.class.getDeclaredMethod("getLastAudibleStreamVolume", int.class);
         lastAudible.setAccessible(true);
@@ -80,6 +88,22 @@ final class SyncController {
     }
 
     void start(boolean primaryProcess) {
+        BroadcastReceiver unlocked = new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent intent) {
+                options.refresh();
+                if (options.sync) requestSync("user-unlocked");
+            }
+        };
+        IntentFilter unlockedFilter = new IntentFilter(Intent.ACTION_USER_UNLOCKED);
+        if (Build.VERSION.SDK_INT >= 33) context.registerReceiver(unlocked, unlockedFilter, null, worker, Context.RECEIVER_NOT_EXPORTED);
+        else context.registerReceiver(unlocked, unlockedFilter, null, worker);
+        register(new BroadcastReceiver() {
+            @Override public void onReceive(Context c, Intent intent) {
+                options.refresh();
+                if (options.sync) requestSync("options-changed");
+                report("options-changed");
+            }
+        }, new IntentFilter(Contract.OPTIONS_ACTION), Contract.STATUS_PERMISSION);
         if (primaryProcess) {
             IntentFilter filter = new IntentFilter();
             filter.addAction(VOLUME); filter.addAction(DEVICES);
@@ -103,10 +127,42 @@ final class SyncController {
             }, new IntentFilter(Contract.STATUS_ACTION), Contract.STATUS_PERMISSION);
             if (BuildFlags.DIAGNOSTICS) {
                 register(new DebugProbe(this), new IntentFilter(Contract.TEST_ACTION), "android.permission.DUMP");
+                register(new DirectMediaProbe(this), new IntentFilter(Contract.DIRECT_TEST_ACTION), "android.permission.DUMP");
             }
         }
         Log.i(Contract.TAG, "READY " + Contract.VERSION + " process=" + processName + " primary=" + primaryProcess + " targetVersion=" + versionName);
         syncNow("startup");
+    }
+
+    void trackForeground(Application application) {
+        application.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
+            @Override public void onActivityResumed(Activity activity) {
+                try {
+                    activity.setVolumeControlStream(options.effectiveDirectMedia() || options.frontKeys ? MUSIC : ASSISTANT);
+                    setActivityFront(true);
+                } catch (Throwable e) { failure("activity-volume", e); }
+            }
+            @Override public void onActivityPaused(Activity activity) { setActivityFront(false); }
+            @Override public void onActivityCreated(Activity activity, Bundle saved) {}
+            @Override public void onActivityStarted(Activity activity) {}
+            @Override public void onActivityStopped(Activity activity) {}
+            @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) {}
+            @Override public void onActivityDestroyed(Activity activity) {}
+        });
+    }
+
+    void setActivityFront(boolean value) { activityFront = value; updateFrontState(); }
+    void setOverlayFront(boolean value) { overlayFront = value; updateFrontState(); }
+    private synchronized void updateFrontState() {
+        boolean front = activityFront || overlayFront;
+        if (front == lastReportedFront) return;
+        try {
+            Bundle state = new Bundle(); state.putBoolean("front", front);
+            state.putInt("pid", Process.myPid());
+            context.getContentResolver().call(Contract.STATUS_URI, "frontState", null, state);
+            lastReportedFront = front;
+            Log.i(Contract.TAG, "XIAOAI_FRONT " + front + " activity=" + activityFront + " overlay=" + overlayFront);
+        } catch (Throwable e) { failure("front-state", e); }
     }
 
     private void register(BroadcastReceiver receiver, IntentFilter filter, String senderPermission) {
@@ -115,14 +171,17 @@ final class SyncController {
     }
 
     void requestSync(String reason) {
+        if (!options.sync) return;
         pendingReason = reason;
         // A leading-edge task avoids starving synchronization during continuous slider movement.
         if (!worker.hasCallbacks(reconcile)) worker.post(reconcile);
     }
 
     boolean syncNow(String reason) {
+        if (!options.sync) return false;
         if (isInternalWrite()) return true;
         synchronized (lock) {
+            if (!options.sync) return false;
             try {
                 int target = readTarget();
                 int old = savedIndex(ASSISTANT);
@@ -156,6 +215,15 @@ final class SyncController {
             out.putInt("assistant", savedIndex(ASSISTANT)); out.putInt("assistantMax", audio.getStreamMaxVolume(ASSISTANT));
             out.putInt("target", readTarget()); out.putInt("pid", Process.myPid());
             out.putBoolean("temporaryMediaMute", audio.isStreamMute(MUSIC));
+            out.putBoolean("syncEnabled", options.sync);
+            out.putBoolean("directMediaEnabled", options.effectiveDirectMedia());
+            String selectorName = XiaoAiCompat.streamSelector(versionCode);
+            if (selectorName != null) {
+                Class<?> selector = Class.forName(selectorName, false, context.getClassLoader());
+                out.putInt("selectedStream", (Integer) selector.getDeclaredMethod("getVoiceAssistStreamType").invoke(null));
+            } else out.putInt("selectedStream", -1);
+            out.putInt("playbackStream", playbackStream); out.putInt("playbackUsage", playbackUsage);
+            out.putLong("playbackAt", playbackAt);
             context.getContentResolver().call(Contract.STATUS_URI, "report", null, out);
         } catch (Throwable e) {
             // Status UI is optional. A stopped/uninstalled companion must never break XiaoAi.
@@ -176,4 +244,9 @@ final class SyncController {
         }
     }
     AudioManager audioForTest() { return audio; }
+    void played(int stream, int usage) {
+        playbackStream = stream; playbackUsage = usage; playbackAt = System.currentTimeMillis();
+        Log.i(Contract.TAG, "PLAYBACK AudioTrack stream=" + stream + " usage=" + usage);
+        report("playback");
+    }
 }
