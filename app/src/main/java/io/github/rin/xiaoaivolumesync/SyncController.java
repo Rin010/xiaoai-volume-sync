@@ -231,6 +231,7 @@ final class SyncController {
             out.putBoolean("temporaryMediaMute", audio.isStreamMute(MUSIC));
             out.putBoolean("syncEnabled", options.sync);
             out.putBoolean("directMediaEnabled", options.effectiveDirectMedia());
+            out.putBoolean("blockMediaMuteEnabled", options.blockMediaMute);
             out.putInt("selectedStream", options.effectiveDirectMedia() ? MUSIC : ASSISTANT);
             out.putInt("playbackStream", playbackStream); out.putInt("playbackUsage", playbackUsage);
             out.putLong("playbackAt", playbackAt);

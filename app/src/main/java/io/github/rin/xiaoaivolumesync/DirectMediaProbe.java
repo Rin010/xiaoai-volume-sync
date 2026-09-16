@@ -24,8 +24,22 @@ final class DirectMediaProbe extends BroadcastReceiver {
             out.put("assistantReadsMedia", audio.getStreamVolume(11) == audio.getStreamVolume(3)
                 && audio.getStreamMaxVolume(11) == audio.getStreamMaxVolume(3));
             Class<?> mute = Class.forName("com.xiaomi.voiceassistant.utils.b0", false, context.getClassLoader());
-            mute.getDeclaredMethod("setMusicStreamMute", AudioManager.class).invoke(null, audio);
-            out.put("internalMuteBlocked", audio.isStreamMute(3) == mutedBefore);
+            java.lang.reflect.Method setMute = mute.getDeclaredMethod("setMusicStreamMute", AudioManager.class);
+            java.lang.reflect.Method clearMute = mute.getDeclaredMethod("setMusicStreamUnMute", AudioManager.class);
+            boolean mutedAfter;
+            try {
+                setMute.invoke(null, audio);
+                mutedAfter = audio.isStreamMute(3);
+                out.put("muteGuardEnabled", sync.options.blockMediaMute);
+                out.put("internalMuteBlocked", mutedAfter == mutedBefore);
+            } finally {
+                // A disabled-guard probe may really mute media; restore the user's initial state.
+                boolean current = audio.isStreamMute(3);
+                if (current != mutedBefore) {
+                    if (mutedBefore) setMute.invoke(null, audio);
+                    else clearMute.invoke(null, audio);
+                }
+            }
             Class<?> manager = Class.forName("com.xiaomi.voiceassistant.l", false, context.getClassLoader());
             Object instance = manager.getDeclaredMethod("getInstance").invoke(null);
             manager.getDeclaredMethod("ensureXiaoaiVolume").invoke(instance);

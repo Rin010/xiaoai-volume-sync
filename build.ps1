@@ -3,7 +3,7 @@ param(
     [Parameter(Mandatory=$true)][string]$SdkPath,
     [Parameter(Mandatory=$true)][string]$XposedApiJar,
     [string]$WorkDir = (Join-Path $PSScriptRoot '.build'),
-    [string]$OutputApk = (Join-Path $PSScriptRoot 'XiaoAiVolumeSync-1.3.0.apk'),
+    [string]$OutputApk = (Join-Path $PSScriptRoot 'XiaoAiVolumeSync-1.4.0.apk'),
     [switch]$Diagnostics
 )
 $ErrorActionPreference = 'Stop'

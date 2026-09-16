@@ -55,7 +55,8 @@ public final class MainActivity extends Activity {
         body.addView(option("小爱音量同步媒体音量", Contract.SYNC_KEY, settings.getBoolean(Contract.SYNC_KEY, true)));
         body.addView(option("小爱同学使用媒体音量", Contract.DIRECT_KEY, settings.getBoolean(Contract.DIRECT_KEY, false)));
         body.addView(option("小爱同学前台按键修改媒体音量", Contract.KEYS_KEY, settings.getBoolean(Contract.KEYS_KEY, true)));
-        body.addView(text("“使用媒体音量”打开后，小爱的播放会走媒体流；“同步”同时打开时，独立小爱滑块仍会跟随媒体，但不再决定小爱的播报音量。\n\n关闭前台按键转发而仍使用独立小爱流时，音量键可能会被同步规则拉回。切换播放流后请重启小爱进程，使已缓存的播放器重新创建。", 15, Color.DKGRAY));
+        body.addView(option("禁用小爱同学静音媒体音量", Contract.MUTE_KEY, settings.getBoolean(Contract.MUTE_KEY, true)));
+        body.addView(text("“使用媒体音量”打开后，小爱的播放会走媒体流；“同步”同时打开时，独立小爱滑块仍会跟随媒体，但不再决定小爱的播报音量。\n\n“禁用小爱同学静音媒体音量”会阻止小爱在识别期间临时静音和恢复媒体流，开关立即生效。切换播放流后请重启小爱进程，使已缓存的播放器重新创建。", 15, Color.DKGRAY));
         status = text("正在检查小爱进程…", 17, Color.rgb(24, 92, 82));
         body.addView(status);
         Button refresh = new Button(this); refresh.setText("刷新运行状态");
@@ -108,6 +109,7 @@ public final class MainActivity extends Activity {
             + "\n最近 AudioTrack：流 " + p.getInt("playbackStream", -1) + "，用途 " + p.getInt("playbackUsage", -1)
             + "\n同步开关实际值：" + (p.getBoolean("syncEnabled", false) ? "开" : "关")
             + "\n使用媒体实际值：" + (p.getBoolean("directMediaEnabled", false) ? "开" : "关")
+            + "\n禁用媒体静音实际值：" + (p.getBoolean("blockMediaMuteEnabled", true) ? "开" : "关")
             + "\n模块：" + p.getString("version", "") + "\n小爱版本：" + p.getString("targetVersion", "")
             + "\n前台音量键转发：" + route
             + "\n系统识别小爱前台：" + (p.getBoolean("xiaoaiFront", false) ? "是" : "否")

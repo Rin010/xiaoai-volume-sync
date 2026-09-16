@@ -25,6 +25,7 @@ public final class StatusProvider extends ContentProvider {
             out.putBoolean(Contract.SYNC_KEY, p.getBoolean(Contract.SYNC_KEY, true));
             out.putBoolean(Contract.DIRECT_KEY, p.getBoolean(Contract.DIRECT_KEY, false));
             out.putBoolean(Contract.KEYS_KEY, p.getBoolean(Contract.KEYS_KEY, true));
+            out.putBoolean(Contract.MUTE_KEY, p.getBoolean(Contract.MUTE_KEY, true));
             return out;
         }
         if ("frontState".equals(method) && target && extras != null) {
@@ -60,6 +61,7 @@ public final class StatusProvider extends ContentProvider {
         out.putLong("playbackAt", extras.getLong("playbackAt", 0));
         out.putBoolean("syncEnabled", extras.getBoolean("syncEnabled", false));
         out.putBoolean("directMediaEnabled", extras.getBoolean("directMediaEnabled", false));
+        out.putBoolean("blockMediaMuteEnabled", extras.getBoolean("blockMediaMuteEnabled", true));
         out.putLong("updated", System.currentTimeMillis());
         out.putBoolean("temporaryMediaMute", extras.getBoolean("temporaryMediaMute"));
         out.apply();

@@ -73,28 +73,28 @@ final class DirectMediaHooks {
         int installed = 0;
         try {
             Class<?> mute = Class.forName("com.xiaomi.voiceassistant.utils.b0", false, loader);
-            installed += hookOptionalVoid(mute, "setMusicStreamMute", AudioManager.class);
-            installed += hookOptionalVoid(mute, "setMusicStreamUnMute", AudioManager.class);
+            installed += hookOptionalVoid(mute, "setMusicStreamMute", true, AudioManager.class);
+            installed += hookOptionalVoid(mute, "setMusicStreamUnMute", true, AudioManager.class);
         } catch (Throwable e) { Log.w(Contract.TAG, "Optional media-mute guards unavailable: " + e); }
         try {
             Class<?> volume = Class.forName("com.xiaomi.voiceassistant.l", false, loader);
-            installed += hookOptionalVoid(volume, "checkMute");
-            installed += hookOptionalVoid(volume, "ensureXiaoaiVolume");
-            installed += hookOptionalVoid(volume, "setPreAutoChangeVolume", int.class);
+            installed += hookOptionalVoid(volume, "checkMute", true);
+            installed += hookOptionalVoid(volume, "ensureXiaoaiVolume", false);
+            installed += hookOptionalVoid(volume, "setPreAutoChangeVolume", false, int.class);
             // Current automatic set/restore helpers. They are optional because their obfuscated
             // names can change without affecting the framework-level redirect.
-            installed += hookOptionalVoid(volume, "j");
-            installed += hookOptionalVoid(volume, "k");
+            installed += hookOptionalVoid(volume, "j", false);
+            installed += hookOptionalVoid(volume, "k", false);
         } catch (Throwable e) { Log.w(Contract.TAG, "Optional auto-volume guards unavailable: " + e); }
         return installed;
     }
-    private int hookOptionalVoid(Class<?> owner, String name, Class<?>... parameters) {
+    private int hookOptionalVoid(Class<?> owner, String name, boolean mediaMuteGuard, Class<?>... parameters) {
         try {
             Method method = owner.getDeclaredMethod(name, parameters);
             if (method.getReturnType() != void.class) return 0;
             hook(method, new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
-                    if (options.effectiveDirectMedia()) p.setResult(null);
+                    if (mediaMuteGuard ? options.blockMediaMute : options.effectiveDirectMedia()) p.setResult(null);
                 }
             });
             return 1;
