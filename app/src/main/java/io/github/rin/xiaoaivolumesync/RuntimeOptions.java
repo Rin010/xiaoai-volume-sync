@@ -9,8 +9,22 @@ final class RuntimeOptions {
     volatile boolean sync = true, directMedia = false, frontKeys = true;
     volatile boolean directAvailable;
     private final Context context;
+    private final ThreadLocal<Integer> frameworkBypass = new ThreadLocal<>();
     RuntimeOptions(Context context) { this.context = context; refresh(); }
     boolean effectiveDirectMedia() { return directMedia && directAvailable; }
+    boolean bypassFrameworkRedirect() {
+        Integer depth = frameworkBypass.get();
+        return depth != null && depth > 0;
+    }
+    void beginFrameworkBypass() {
+        Integer depth = frameworkBypass.get();
+        frameworkBypass.set(depth == null ? 1 : depth + 1);
+    }
+    void endFrameworkBypass() {
+        Integer depth = frameworkBypass.get();
+        if (depth == null || depth <= 1) frameworkBypass.remove();
+        else frameworkBypass.set(depth - 1);
+    }
     void refresh() {
         try {
             Bundle values = context.getContentResolver().call(Contract.STATUS_URI, "getOptions", null, null);

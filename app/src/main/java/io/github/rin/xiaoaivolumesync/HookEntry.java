@@ -32,14 +32,8 @@ public final class HookEntry implements IXposedHookLoadPackage {
                     RuntimeOptions switches = new RuntimeOptions((Context) p.args[0]);
                     SyncController ready = new SyncController((Context) p.args[0], pkg.processName, switches);
                     controller = ready;
-                    if (XiaoAiCompat.supportsDirectMedia(ready.targetVersionCode())) {
-                        try { new DirectMediaHooks(switches).install(pkg.classLoader,
-                            XiaoAiCompat.streamSelector(ready.targetVersionCode())); }
-                        catch (Throwable e) { switches.directAvailable = false; error("direct-media-hooks", e); }
-                    } else if (switches.directMedia) {
-                        switches.directAvailable = false;
-                        error("direct-media-version", new IllegalStateException("Uninspected XiaoAi version"));
-                    }
+                    try { new DirectMediaHooks(switches).install(pkg.classLoader); }
+                    catch (Throwable e) { switches.directAvailable = false; error("direct-media-hooks", e); }
                     ready.start(Contract.TARGET.equals(pkg.processName));
                     if (Contract.TARGET.equals(pkg.processName)) {
                         ready.trackForeground((Application) p.thisObject);
@@ -54,7 +48,9 @@ public final class HookEntry implements IXposedHookLoadPackage {
             new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     SyncController c = controller;
-                    if (c == null || !c.options.sync || c.isInternalWrite() || (int) p.args[0] != 11) return;
+                    if (c == null || c.isInternalWrite() || (int) p.args[0] != 11) return;
+                    if (c.options.effectiveDirectMedia()) { p.setResult(null); return; }
+                    if (!c.options.sync) return;
                     try {
                         int requested = (int) p.args[1];
                         int target = c.readTarget();
@@ -73,7 +69,9 @@ public final class HookEntry implements IXposedHookLoadPackage {
                     SyncController c = controller;
                     int stream = (int) p.args[0], direction = (int) p.args[1];
                     // Preserve mute/unmute and all media operations, including XiaoAi's focus logic.
-                    if (c == null || !c.options.sync || c.isInternalWrite() || stream != 11 || direction < -1 || direction > 1) return;
+                    if (c == null || c.isInternalWrite() || stream != 11 || direction < -1 || direction > 1) return;
+                    if (c.options.effectiveDirectMedia()) { p.setResult(null); return; }
+                    if (!c.options.sync) return;
                     if (c.syncNow("assistant-adjust")) p.setResult(null);
                 }
             });
@@ -106,16 +104,14 @@ public final class HookEntry implements IXposedHookLoadPackage {
     }
 
     private void hookKnownVolumeFloor(XC_LoadPackage.LoadPackageParam pkg, SyncController c) {
-        // Optional optimization only for explicitly inspected XiaoAi versions.
-        // Standard AudioManager hooks above remain the primary protection on all versions.
-        if (!XiaoAiCompat.supportsKnownVolumeFloor(c.targetVersionCode())) return;
+        // Optional private guard. Framework AudioManager hooks remain the primary protection.
         try {
             XposedHelpers.findAndHookMethod("com.xiaomi.voiceassistant.l", pkg.classLoader, "ensureXiaoaiVolume", new XC_MethodHook() {
                 @Override protected void beforeHookedMethod(MethodHookParam p) {
                     if (c.syncNow("volume-floor")) p.setResult(null);
                 }
             });
-            Log.i(Contract.TAG, "Installed verified XiaoAi volume-floor hook for " + c.targetVersionCode());
+            Log.i(Contract.TAG, "Installed XiaoAi volume-floor guard for " + c.targetVersionCode());
         } catch (Throwable e) { error("optional-volume-floor", e); }
     }
     private static void error(String stage, Throwable e) {

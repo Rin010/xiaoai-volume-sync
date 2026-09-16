@@ -81,10 +81,24 @@ final class SyncController {
 
     long targetVersionCode() { return versionCode; }
     boolean isInternalWrite() { return Boolean.TRUE.equals(internalWrite.get()); }
-    int savedIndex(int stream) throws Exception { return (Integer) lastAudible.invoke(audio, stream); }
+    int savedIndex(int stream) throws Exception {
+        options.beginFrameworkBypass();
+        try { return (Integer) lastAudible.invoke(audio, stream); }
+        finally { options.endFrameworkBypass(); }
+    }
+    int rawMax(int stream) {
+        options.beginFrameworkBypass();
+        try { return audio.getStreamMaxVolume(stream); }
+        finally { options.endFrameworkBypass(); }
+    }
+    private int rawMin(int stream) throws Exception {
+        options.beginFrameworkBypass();
+        try { return (Integer) minimumIndex.invoke(audio, stream); }
+        finally { options.endFrameworkBypass(); }
+    }
     int readTarget() throws Exception {
         if (!supported) throw new IllegalStateException("Unsupported stream configuration");
-        return VolumeMath.map(savedIndex(MUSIC), audio.getStreamMaxVolume(MUSIC), (Integer) minimumIndex.invoke(audio, ASSISTANT), audio.getStreamMaxVolume(ASSISTANT));
+        return VolumeMath.map(savedIndex(MUSIC), rawMax(MUSIC), rawMin(ASSISTANT), rawMax(ASSISTANT));
     }
 
     void start(boolean primaryProcess) {
@@ -189,7 +203,7 @@ final class SyncController {
                     internalWrite.set(true);
                     try { audio.setStreamVolume(ASSISTANT, target, 0); }
                     finally { internalWrite.remove(); }
-                    Log.i(Contract.TAG, "SYNC " + reason + " media=" + savedIndex(MUSIC) + "/" + audio.getStreamMaxVolume(MUSIC) + " assistant=" + old + "->" + target);
+                    Log.i(Contract.TAG, "SYNC " + reason + " media=" + savedIndex(MUSIC) + "/" + rawMax(MUSIC) + " assistant=" + old + "->" + target);
                 }
                 lastError = "";
                 worker.removeCallbacks(reportTask);
@@ -211,17 +225,13 @@ final class SyncController {
             Bundle out = new Bundle();
             out.putString("version", Contract.VERSION); out.putString("targetVersion", versionName);
             out.putString("process", processName); out.putString("reason", reason); out.putString("error", lastError);
-            out.putInt("media", savedIndex(MUSIC)); out.putInt("mediaMax", audio.getStreamMaxVolume(MUSIC));
-            out.putInt("assistant", savedIndex(ASSISTANT)); out.putInt("assistantMax", audio.getStreamMaxVolume(ASSISTANT));
+            out.putInt("media", savedIndex(MUSIC)); out.putInt("mediaMax", rawMax(MUSIC));
+            out.putInt("assistant", savedIndex(ASSISTANT)); out.putInt("assistantMax", rawMax(ASSISTANT));
             out.putInt("target", readTarget()); out.putInt("pid", Process.myPid());
             out.putBoolean("temporaryMediaMute", audio.isStreamMute(MUSIC));
             out.putBoolean("syncEnabled", options.sync);
             out.putBoolean("directMediaEnabled", options.effectiveDirectMedia());
-            String selectorName = XiaoAiCompat.streamSelector(versionCode);
-            if (selectorName != null) {
-                Class<?> selector = Class.forName(selectorName, false, context.getClassLoader());
-                out.putInt("selectedStream", (Integer) selector.getDeclaredMethod("getVoiceAssistStreamType").invoke(null));
-            } else out.putInt("selectedStream", -1);
+            out.putInt("selectedStream", options.effectiveDirectMedia() ? MUSIC : ASSISTANT);
             out.putInt("playbackStream", playbackStream); out.putInt("playbackUsage", playbackUsage);
             out.putLong("playbackAt", playbackAt);
             context.getContentResolver().call(Contract.STATUS_URI, "report", null, out);

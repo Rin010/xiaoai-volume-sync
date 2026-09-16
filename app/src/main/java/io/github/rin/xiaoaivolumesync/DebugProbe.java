@@ -23,7 +23,7 @@ final class DebugProbe extends BroadcastReceiver {
             int expected = sync.readTarget();
             int mediaBefore = sync.savedIndex(3);
             // Exercise the real hooked entry point with an intentionally conflicting write.
-            audio.setStreamVolume(11, audio.getStreamMaxVolume(11), 0);
+            audio.setStreamVolume(11, sync.rawMax(11), 0);
             result.put("writeClamped", sync.savedIndex(11) == expected);
             audio.adjustStreamVolume(11, AudioManager.ADJUST_RAISE, 0);
             result.put("adjustClamped", sync.savedIndex(11) == expected);
@@ -34,12 +34,12 @@ final class DebugProbe extends BroadcastReceiver {
             sync.syncNow("probe-media-muted");
             result.put("temporaryMutePreservesTarget", sync.savedIndex(11) == expected);
             result.put("mediaIndexUnchanged", sync.savedIndex(3) == mediaBefore);
-            if (XiaoAiCompat.supportsKnownVolumeFloor(sync.targetVersionCode())) {
+            try {
                 Class<?> managerClass = Class.forName("com.xiaomi.voiceassistant.l", false, context.getClassLoader());
                 Object manager = managerClass.getDeclaredMethod("getInstance").invoke(null);
                 managerClass.getDeclaredMethod("ensureXiaoaiVolume").invoke(manager);
                 result.put("floorHookRespectsTarget", sync.savedIndex(11) == expected);
-            }
+            } catch (ClassNotFoundException | NoSuchMethodException ignored) {}
             AudioTrack track = new AudioTrack.Builder()
                 .setAudioAttributes(new AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ASSISTANT).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
                 .setAudioFormat(new AudioFormat.Builder().setSampleRate(16000).setEncoding(AudioFormat.ENCODING_PCM_16BIT).setChannelMask(AudioFormat.CHANNEL_OUT_MONO).build())

@@ -10,7 +10,7 @@ import android.media.AudioTrack;
 import android.util.Log;
 import org.json.JSONObject;
 
-/** Diagnostic-only probe: exercises XiaoAi's own selector and a silent player. */
+/** Diagnostic-only probe: exercises framework-level volume reads and a silent player. */
 final class DirectMediaProbe extends BroadcastReceiver {
     private final SyncController sync;
     DirectMediaProbe(SyncController sync) { this.sync = sync; }
@@ -21,10 +21,8 @@ final class DirectMediaProbe extends BroadcastReceiver {
             AudioManager audio = sync.audioForTest();
             int mediaBefore = sync.savedIndex(3);
             boolean mutedBefore = audio.isStreamMute(3);
-            String selectorName = XiaoAiCompat.streamSelector(sync.targetVersionCode());
-            if (selectorName == null) throw new IllegalStateException("Unsupported XiaoAi version");
-            Class<?> selector = Class.forName(selectorName, false, context.getClassLoader());
-            out.put("selectedMedia", (Integer) selector.getDeclaredMethod("getVoiceAssistStreamType").invoke(null) == 3);
+            out.put("assistantReadsMedia", audio.getStreamVolume(11) == audio.getStreamVolume(3)
+                && audio.getStreamMaxVolume(11) == audio.getStreamMaxVolume(3));
             Class<?> mute = Class.forName("com.xiaomi.voiceassistant.utils.b0", false, context.getClassLoader());
             mute.getDeclaredMethod("setMusicStreamMute", AudioManager.class).invoke(null, audio);
             out.put("internalMuteBlocked", audio.isStreamMute(3) == mutedBefore);
