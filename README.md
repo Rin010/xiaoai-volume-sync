@@ -5,6 +5,7 @@
 [![Android 12+](https://img.shields.io/badge/Android-12%2B-3DDC84?logo=android&logoColor=white)](https://developer.android.com/about/versions/12)
 [![LSPosed](https://img.shields.io/badge/Framework-LSPosed-5C6BC0)](https://github.com/LSPosed/LSPosed)
 [![Version](https://img.shields.io/badge/version-1.4.0-0969DA)](https://github.com/Rin010/xiaoai-volume-sync)
+[![Build APK](https://github.com/Rin010/xiaoai-volume-sync/actions/workflows/build-apk.yml/badge.svg)](https://github.com/Rin010/xiaoai-volume-sync/actions/workflows/build-apk.yml)
 
 在无数次骑车需要单独调小爱音量，又无数次晚上让关灯被最大音量背刺后搞了这玩意。此项目除了这段话都是AI搞的，有问题找AI。
 
@@ -33,7 +34,7 @@ XiaoAi Volume Sync 是一个适用 HyperOS 的 LSPosed 模块，用于控制小�
 
 ## 安装
 
-1. 从源码[构建 APK](#从源码构建)，然后安装：
+1. 从 [Build APK](https://github.com/Rin010/xiaoai-volume-sync/actions/workflows/build-apk.yml) 工作流下载构建产物，或从源码[构建 APK](#从源码构建)，然后安装：
 
    ```shell
    adb install -r XiaoAiVolumeSync-1.4.0.apk
@@ -122,11 +123,13 @@ flowchart LR
 
 构建脚本面向 Windows PowerShell，不依赖 Android Studio 或 Gradle。
 
+仓库中的 `Build APK` 工作流会在 `main` 分支推送、版本标签推送、Pull Request 和手动触发时执行相同的构建流程，并保留 APK 与 SHA-256 构建产物 30 天。CI APK 使用每次运行临时生成的本地测试证书签名；安装另一轮 CI 生成的 APK 前，需要先卸载使用不同测试证书签名的旧版本。
+
 ### 依赖
 
 - JDK，包含 `java`、`javac`、`jar` 和 `keytool`
 - Android SDK Platform 36
-- Android SDK Build Tools 36
+- Android SDK Build Tools 36（CI 使用 SDK Manager 中的 36.0.0）
 - [Xposed API 82](https://api.xposed.info/de/robv/android/xposed/api/82/api-82.jar)
 
 已验证的依赖文件：
@@ -181,6 +184,7 @@ app/src/main/
 └── res/
 tests/                          # 独立 JVM 测试
 verification/                   # 实机验证记录
+.github/workflows/build-apk.yml # GitHub Actions APK 构建
 build.ps1                       # 可复现构建脚本
 ```
 

@@ -2,6 +2,7 @@ param(
     [Parameter(Mandatory=$true)][string]$JavaHome,
     [Parameter(Mandatory=$true)][string]$SdkPath,
     [Parameter(Mandatory=$true)][string]$XposedApiJar,
+    [string]$BuildToolsVersion,
     [string]$WorkDir = (Join-Path $PSScriptRoot '.build'),
     [string]$OutputApk = (Join-Path $PSScriptRoot 'XiaoAiVolumeSync-1.4.0.apk'),
     [switch]$Diagnostics
@@ -18,8 +19,15 @@ $OutputApk = [IO.Path]::GetFullPath($OutputApk)
 $XposedApiJar = [IO.Path]::GetFullPath($XposedApiJar)
 New-Item -ItemType Directory -Force -Path $WorkDir,(Split-Path $OutputApk) | Out-Null
 $androidJar = Join-Path $SdkPath 'platforms/android-36/android.jar'
-$toolsDir = Get-ChildItem (Join-Path $SdkPath 'build-tools') -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'aapt2.exe') } | Sort-Object Name -Descending | Select-Object -First 1
-if (!$toolsDir -or !(Test-Path $androidJar) -or !(Test-Path $XposedApiJar)) { throw 'Install Android platform 36, Build Tools 36, and Xposed API 82 first; see README.' }
+if ([string]::IsNullOrWhiteSpace($BuildToolsVersion)) {
+    $toolsDir = Get-ChildItem (Join-Path $SdkPath 'build-tools') -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'aapt2.exe') } | Sort-Object Name -Descending | Select-Object -First 1
+} else {
+    $toolsDir = Get-Item (Join-Path $SdkPath "build-tools/$BuildToolsVersion") -ErrorAction SilentlyContinue
+}
+$toolsLabel = if ([string]::IsNullOrWhiteSpace($BuildToolsVersion)) { 'Build Tools 36' } else { "Build Tools $BuildToolsVersion" }
+if (!$toolsDir -or !(Test-Path (Join-Path $toolsDir.FullName 'aapt2.exe')) -or !(Test-Path $androidJar) -or !(Test-Path $XposedApiJar)) {
+    throw "Install Android platform 36, $toolsLabel, and Xposed API 82 first; see README."
+}
 $java = Join-Path $JavaHome 'bin/java.exe'
 $javac = Join-Path $JavaHome 'bin/javac.exe'
 $jar = Join-Path $JavaHome 'bin/jar.exe'

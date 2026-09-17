@@ -1,0 +1,110 @@
+name: Build APK
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - "v*"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-apk-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build signed test APK
+    runs-on: windows-2022
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Ensure Android SDK packages
+        shell: pwsh
+        run: |
+          $androidJar = Join-Path $env:ANDROID_HOME "platforms\android-36\android.jar"
+          $aapt2 = Join-Path $env:ANDROID_HOME "build-tools\36.0.0\aapt2.exe"
+          if (!(Test-Path $androidJar) -or !(Test-Path $aapt2)) {
+            $sdkManager = Join-Path $env:ANDROID_HOME "cmdline-tools\latest\bin\sdkmanager.bat"
+            if (!(Test-Path $sdkManager)) {
+              $sdkManager = Get-ChildItem (Join-Path $env:ANDROID_HOME "cmdline-tools") -Recurse -Filter sdkmanager.bat |
+                Sort-Object FullName -Descending |
+                Select-Object -First 1 -ExpandProperty FullName
+            }
+            if (!$sdkManager) { throw "Android sdkmanager.bat was not found." }
+            & $sdkManager "platforms;android-36" "build-tools;36.0.0"
+            if ($LASTEXITCODE -ne 0) { throw "sdkmanager failed with exit code $LASTEXITCODE" }
+          }
+
+      - name: Read module version
+        id: metadata
+        shell: pwsh
+        run: |
+          [xml]$manifest = Get-Content "app/src/main/AndroidManifest.xml" -Raw
+          $androidNs = "http://schemas.android.com/apk/res/android"
+          $version = $manifest.manifest.GetAttribute("versionName", $androidNs)
+          if ([string]::IsNullOrWhiteSpace($version)) { throw "Manifest versionName is empty." }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "apk_name=XiaoAiVolumeSync-$version.apk" >> $env:GITHUB_OUTPUT
+
+      - name: Download and verify Xposed API 82
+        id: xposed
+        shell: pwsh
+        run: |
+          $jar = Join-Path $env:RUNNER_TEMP "api-82.jar"
+          Invoke-WebRequest "https://api.xposed.info/de/robv/android/xposed/api/82/api-82.jar" -OutFile $jar
+          $expected = "f48c635f1c7469fdec0e00ad2ea0b7a6b2f5b55065784a35b7ca3a84615e8e25"
+          $actual = (Get-FileHash $jar -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw "Xposed API checksum mismatch: $actual" }
+          "path=$jar" >> $env:GITHUB_OUTPUT
+
+      - name: Build and verify APK
+        shell: pwsh
+        run: |
+          $outputDir = Join-Path $env:GITHUB_WORKSPACE "build-output"
+          $workDir = Join-Path $env:RUNNER_TEMP "xiaoaivolumesync\build"
+          $apk = Join-Path $outputDir "${{ steps.metadata.outputs.apk_name }}"
+          New-Item -ItemType Directory -Force $outputDir | Out-Null
+
+          ./build.ps1 `
+            -JavaHome $env:JAVA_HOME `
+            -SdkPath $env:ANDROID_HOME `
+            -XposedApiJar "${{ steps.xposed.outputs.path }}" `
+            -BuildToolsVersion "36.0.0" `
+            -WorkDir $workDir `
+            -OutputApk $apk
+
+          $hash = (Get-FileHash $apk -Algorithm SHA256).Hash.ToLowerInvariant()
+          $fileName = [IO.Path]::GetFileName($apk)
+          "$hash  $fileName" | Set-Content "$apk.sha256" -Encoding ascii
+
+          "### APK build" >> $env:GITHUB_STEP_SUMMARY
+          "- File: ``$fileName``" >> $env:GITHUB_STEP_SUMMARY
+          "- SHA-256: ``$hash``" >> $env:GITHUB_STEP_SUMMARY
+          "- Signing: ephemeral local test certificate" >> $env:GITHUB_STEP_SUMMARY
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: XiaoAiVolumeSync-${{ steps.metadata.outputs.version }}
+          path: |
+            build-output/*.apk
+            build-output/*.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
